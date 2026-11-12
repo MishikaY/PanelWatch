@@ -1,4 +1,5 @@
 import json
+import time
 import joblib
 import numpy as np
 import pandas as pd
@@ -12,20 +13,39 @@ forecaster = joblib.load("models/forecaster.pkl")
 NOISE = float(pd.read_csv("data/daily_baseline.csv")["clean_loss"].std())
 
 
+def _get_json(url, params, tries=4):
+    last = "no reply"
+    for i in range(tries):
+        try:
+            r = requests.get(url, params=params, timeout=30,
+                             headers={"User-Agent": "panelwatch-student-project"})
+            data = r.json()
+            if "hourly" in data:
+                return data
+            last = data.get("reason", str(data)[:200])
+        except Exception as e:
+            last = f"{type(e).__name__}: {e}"
+        time.sleep(2 * (i + 1))
+    raise ValueError(f"Open-Meteo did not return data: {last}")
+
+
 def _fetch_weather(lat, lon, past=14, future=8):
-    w = requests.get("https://api.open-meteo.com/v1/forecast", params=dict(
+    w = _get_json("https://api.open-meteo.com/v1/forecast", dict(
         latitude=lat, longitude=lon,
         hourly="temperature_2m,shortwave_radiation,precipitation",
-        past_days=past, forecast_days=future, timezone="auto"), timeout=30).json()
-    a = requests.get("https://air-quality-api.open-meteo.com/v1/air-quality", params=dict(
-        latitude=lat, longitude=lon, hourly="pm10",
-        past_days=past, forecast_days=1, timezone="auto"), timeout=30).json()
+        past_days=past, forecast_days=future, timezone="auto"))
     h = pd.DataFrame(w["hourly"])
-    p = pd.DataFrame(a["hourly"])
     h["time"] = pd.to_datetime(h["time"])
-    p["time"] = pd.to_datetime(p["time"])
-    h = h.merge(p, on="time", how="left")
-    h["pm10"] = h["pm10"].interpolate().bfill().ffill()
+    try:
+        a = _get_json("https://air-quality-api.open-meteo.com/v1/air-quality", dict(
+            latitude=lat, longitude=lon, hourly="pm10",
+            past_days=past, forecast_days=1, timezone="auto"))
+        p = pd.DataFrame(a["hourly"])
+        p["time"] = pd.to_datetime(p["time"])
+        h = h.merge(p, on="time", how="left")
+        h["pm10"] = h["pm10"].interpolate().bfill().ffill()
+    except ValueError:
+        h["pm10"] = 60.0          # dust data unavailable: use a typical value
     h["date"] = h["time"].dt.date
     return h
 
@@ -38,7 +58,7 @@ def get_weather(lat, lon, past=14, future=8):
         _cache[key] = _fetch_weather(lat, lon, past, future)
     return _cache[key].copy()
 
-    
+
 def expected_kw(h):
     _cache = {}
 
