@@ -160,8 +160,9 @@ fig.update_yaxes(gridcolor="#eef0f3", rangemode="tozero")
 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
 # ---------- footer ----------
+src = "live" if r.get("source", "live") == "live" else "saved copy"
 st.markdown(
     f"<div class='foot'><div>{BRAND} · Solar power loss forecasting and predictive "
-    f"maintenance</div><div>Data up to {r['as_of']} · Weather and dust: Open-Meteo · "
+    f"maintenance</div><div>Data up to {r['as_of']} · Weather and dust: Open-Meteo ({src}) · "
     f"Panel readings: simulated · Money assumes ₹6 per kWh and ₹500 per cleaning</div></div>",
     unsafe_allow_html=True)

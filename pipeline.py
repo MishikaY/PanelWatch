@@ -1,5 +1,6 @@
 import json
 import time
+import os
 import joblib
 import numpy as np
 import pandas as pd
@@ -52,12 +53,31 @@ def _fetch_weather(lat, lon, past=14, future=8):
 _cache = {}
 
 
+def _load_snapshot(lat, lon):
+    path = f"data/snapshots/{round(lat, 2)}_{round(lon, 2)}.csv"
+    if not os.path.exists(path):
+        return None
+    h = pd.read_csv(path, parse_dates=["time"])
+    shift = pd.Timestamp.now().normalize() - pd.Timestamp(h["saved_on"].iloc[0])
+    h["time"] = h["time"] + shift          # move the saved days up to today
+    h["date"] = h["time"].dt.date
+    return h.drop(columns=["saved_on"])
+
+
 def get_weather(lat, lon, past=14, future=8):
     key = (round(lat, 2), round(lon, 2), str(pd.Timestamp.now().floor("h")))
     if key not in _cache:
-        _cache[key] = _fetch_weather(lat, lon, past, future)
-    return _cache[key].copy()
-
+        try:
+            _cache[key] = (_fetch_weather(lat, lon, past, future), "live")
+        except Exception:
+            snap = _load_snapshot(lat, lon)
+            if snap is None:
+                raise
+            _cache[key] = (snap, "saved copy")
+    h, source = _cache[key]
+    h = h.copy()
+    h.attrs["source"] = source
+    return h
 
 def expected_kw(h):
     _cache = {}
@@ -84,6 +104,7 @@ def expected_kw(h):
 def build_report(lat, lon, tariff=6.0, clean_cost=500.0, system_kw=100.0,
                  days_since_clean=14, pm10=None, rain_next3=None):
     h = get_weather(lat, lon)
+    source = h.attrs.get("source", "live")
     h["expected"] = expected_kw(h)
     h["expected"] = h["expected"] * system_kw / max(h["expected"].max(), 1e-6)
     today = pd.Timestamp.now().date()
@@ -145,7 +166,7 @@ def build_report(lat, lon, tariff=6.0, clean_cost=500.0, system_kw=100.0,
                for _, r in past.iterrows()]
     return dict(lat=lat, lon=lon, as_of=str(past["date"].iloc[-1]),
                 rain_next3_mm=rain3, rain_next7_mm=rain7, pm10_recent=pm_recent,
-                assessment=a, history=history)
+                assessment=a, history=history, source=source)
 
 if __name__ == "__main__":
     r = build_report(28.61, 77.21)          # New Delhi
