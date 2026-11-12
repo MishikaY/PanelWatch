@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+.DS_Store
+data/Plant_*.csv
+data/clean.csv
+data/monitor.db
