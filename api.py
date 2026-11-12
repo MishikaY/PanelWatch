@@ -34,7 +34,10 @@ def report(lat: float = 28.61, lon: float = 77.21, system_kw: float = 100.0,
         r = build_report(lat, lon, tariff, clean_cost, system_kw,
                          days_since_clean, pm10, rain_next3)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"Could not build report: {e}")
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=502,
+                            detail=f"Could not build report: {type(e).__name__}: {e}")
     a = r["assessment"]
     con = db()
     con.execute("INSERT INTO reports (lat,lon,severity,loss_pct,f3,f7,advice) "

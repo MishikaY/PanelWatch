@@ -65,7 +65,8 @@ def get_report(city, days, pm10, rain3, kw):
     if rain3 is not None:
         params["rain_next3"] = rain3
     resp = requests.get(f"{API}/report", params=params, timeout=90)
-    resp.raise_for_status()
+    if resp.status_code != 200:
+        raise RuntimeError(resp.text[:300])
     return resp.json()
 
 
@@ -99,8 +100,8 @@ with st.container(border=True):
 
 try:
     r = get_report(city, days, pm10, rain3, kw)
-except Exception:
-    st.error("Cannot reach the backend. Start it with: uvicorn api:app --reload")
+except Exception as e:
+    st.error(f"Could not get the report: {e}")
     st.stop()
 
 a = r["assessment"]
